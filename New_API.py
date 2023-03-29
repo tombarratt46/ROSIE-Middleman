@@ -3,7 +3,7 @@ from pympler import asizeof
 import rospy
 from geometry_msgs.msg import Twist, PointStamped
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+from std_msgs.msg import String, Empty
 from nav_msgs.msg import Odometry
 import numpy as np
 import random
@@ -89,8 +89,9 @@ async def control(command):
     elif command == "right":
         twist.angular.z = -0.3
     elif command == "stop":
-        twist.linear.x = 0
-        twist.angular.z = 0
+        pub = rospy.Publisher('emergency', Empty, queue_size=1)
+        pub.publish(Empty())
+        return
     #logging.debug(f"[/control] Command: {command}, Twist: {twist}")
     pub.publish(twist)
 
@@ -138,4 +139,4 @@ async def pointcloud(response: Response):
 # cmd_pub = rospy.Publisher('cmd', String, queue_size=10)
 
 # rate = rospy.Rate(10) # 10hz
-# rospy.Subscriber("camera/depth/image_rect_raw", Image, depth_cb)
+#
