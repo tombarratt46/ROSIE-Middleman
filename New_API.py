@@ -3,7 +3,7 @@ from pympler import asizeof
 import rospy
 from geometry_msgs.msg import Twist, PointStamped
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+from std_msgs.msg import String, Empty
 from nav_msgs.msg import Odometry
 import numpy as np
 import open3d as o3d
@@ -40,6 +40,17 @@ def depth_cb(data):
     np_arr[0,0] = 2000
     distance = np_arr[np_arr!=0].min()
     #print(f"Distance: {distance}")
+
+@app.get("/scan")
+async def scan():
+    print(f"[/scan] Endpoint Called")
+    
+    pub = rospy.Publisher('scan', String, queue_size=10)
+    pub.publish("True")
+
+    print("published")
+
+    return {"scan"}
 
 @app.get("/goto/{x}/{y}")
 async def goto(x,y):
@@ -81,8 +92,9 @@ async def control(command):
     elif command == "right":
         twist.angular.z = -0.3
     elif command == "stop":
-        twist.linear.x = 0
-        twist.angular.z = 0
+        pub = rospy.Publisher('emergency', Empty, queue_size=10)
+        pub.publish(Empty())
+        return
     #logging.debug(f"[/control] Command: {command}, Twist: {twist}")
     pub.publish(twist)
 
