@@ -6,16 +6,13 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 import numpy as np
-import random
 import open3d as o3d
 import os
 import subprocess
 import time
-import io
-import logging
 
 DEBUG = False
-#logging.debug(f"Debug mode: {DEBUG}")
+print(f"Debug mode: {DEBUG}")
 
 app = FastAPI()
 
@@ -28,7 +25,7 @@ print("Finished setup")
 
 def depth_cb(data):
     global distance, prev_calc
-    ##logging.debug(f"Depth callback called")
+    print(f"Depth callback called")
     # # if time.time() - prev_calc < 0.5:
     # #     return
     # prev_calc = time.time()
@@ -42,12 +39,11 @@ def depth_cb(data):
     np_arr[np_arr < 100] = 0
     np_arr[0,0] = 2000
     distance = np_arr[np_arr!=0].min()
-    #logging.debug(f"Distance: {distance}")
+    #print(f"Distance: {distance}")
 
 @app.get("/goto/{x}/{y}")
 async def goto(x,y):
     print(f"[/goto] Endpoint Called - {x}, {y}")
-    #logging.debug(f"[/goto] Endpoint Called")
     
     ps = PointStamped()
     ps.header.frame_id = "map"
@@ -69,10 +65,6 @@ async def telemetry():
     else:
         odo_msg = rospy.wait_for_message('/odometry/filtered', Odometry)
         return {"x": odo_msg.pose.pose.position.x, "y": odo_msg.pose.pose.position.y, "z": odo_msg.pose.pose.position.z, "roll": odo_msg.pose.pose.orientation.x, "pitch": odo_msg.pose.pose.orientation.y, "yaw": odo_msg.pose.pose.orientation.z}
-
-    
-    #logging.debug(f"[/telemetry] Endpoint Called")
-
 
 @app.get("/control/{command}")
 async def control(command):
@@ -96,9 +88,6 @@ async def control(command):
 
 @app.get("/pointcloud")
 async def pointcloud(response: Response): 
-    print("Hello")
-    # global j
-    # return j
     Response.content_type = "application/octet-stream"
     print("Pointcloud endpoint called")
     if not os.path.exists("tmp"):
