@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Response, responses
 from pympler import asizeof
 import rospy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PointStamped
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
@@ -15,7 +15,7 @@ import io
 import logging
 
 DEBUG = False
-logging.debug(f"Debug mode: {DEBUG}")
+#logging.debug(f"Debug mode: {DEBUG}")
 
 app = FastAPI()
 
@@ -24,9 +24,11 @@ rospy.init_node('loco', anonymous=True)
 key_pressed = ""
 distance = 500000
 
+print("Finished setup")
+
 def depth_cb(data):
     global distance, prev_calc
-    logging.debug(f"Depth callback called")
+    ##logging.debug(f"Depth callback called")
     # # if time.time() - prev_calc < 0.5:
     # #     return
     # prev_calc = time.time()
@@ -40,14 +42,36 @@ def depth_cb(data):
     np_arr[np_arr < 100] = 0
     np_arr[0,0] = 2000
     distance = np_arr[np_arr!=0].min()
-    logging.debug(f"Distance: {distance}")
+    #logging.debug(f"Distance: {distance}")
+
+@app.get("/goto/{x}/{y}")
+async def goto(x,y):
+    print(f"[/goto] Endpoint Called - {x}, {y}")
+    #logging.debug(f"[/goto] Endpoint Called")
+    
+    ps = PointStamped()
+    ps.header.frame_id = "map"
+    ps.point.x = float(x)
+    ps.point.y = float(y)
+    ps.point.z = 0.0
+    #Publish the point
+    pub = rospy.Publisher('goto', PointStamped, queue_size=10)
+    pub.publish(ps)
+    print("Published")
+
+    return #{"Point Published: {x}, {y}"}
 
 
 @app.get("/telemetry")
 async def telemetry():
-    logging.debug(f"[/telemetry] Endpoint Called")
-    odo_msg = rospy.wait_for_message('/odometry/filtered', Odometry)
-    return {"x": odo_msg.pose.pose.position.x, "y": odo_msg.pose.pose.position.y, "z": odo_msg.pose.pose.position.z, "roll": odo_msg.pose.pose.orientation.x, "pitch": odo_msg.pose.pose.orientation.y, "yaw": odo_msg.pose.pose.orientation.z}
+    if DEBUG:
+        return {"x": 0, "y": 0, "z": 0, "roll":0, "pitch":0, "yaw":0}
+    else:
+        odo_msg = rospy.wait_for_message('/odometry/filtered', Odometry)
+        return {"x": odo_msg.pose.pose.position.x, "y": odo_msg.pose.pose.position.y, "z": odo_msg.pose.pose.position.z, "roll": odo_msg.pose.pose.orientation.x, "pitch": odo_msg.pose.pose.orientation.y, "yaw": odo_msg.pose.pose.orientation.z}
+
+    
+    #logging.debug(f"[/telemetry] Endpoint Called")
 
 
 @app.get("/control/{command}")
@@ -57,55 +81,56 @@ async def control(command):
     twist = Twist()
     print(distance)
     if command == "forward" and distance > 500:
-        twist.linear.x = 0.3
+        twist.linear.x = 0.2
     elif command == "back":
-        twist.linear.x = -0.3
+        twist.linear.x = -0.2
     elif command == "left":
-        twist.angular.z = 0.4
+        twist.angular.z = 0.3
     elif command == "right":
-        twist.angular.z = -0.4
+        twist.angular.z = -0.3
     elif command == "stop":
         twist.linear.x = 0
         twist.angular.z = 0
-    logging.debug(f"[/control] Command: {command}, Twist: {twist}")
+    #logging.debug(f"[/control] Command: {command}, Twist: {twist}")
     pub.publish(twist)
 
 @app.get("/pointcloud")
 async def pointcloud(response: Response): 
+    print("Hello")
     # global j
     # return j
     Response.content_type = "application/octet-stream"
-
+    print("Pointcloud endpoint called")
     if not os.path.exists("tmp"):
-        logging.debug(f"[/pointcloud] Creating tmp directory")
+        print("Creating tmp directory")
         os.mkdir("tmp")
 
     for f in os.listdir("tmp"):
         os.remove(os.path.join("tmp", f))
-        logging.debug(f"[/pointcloud] Deleting Temp File: {f}")
+        print(f"Removed {f} from tmp directory")
     if DEBUG:
-        logging.debug(f"[/pointcloud] Debug mode, using pre-recorded pointcloud")
-        filename = "input.pcd"
+        print(f"[/pointcloud] Debug mode, using pre-recorded pointcloud")
+        filename = "debug.pcd"
     else:
-        logging.debug(f"[/pointcloud] Recording pointcloud")
+        print(f"[/pointcloud] Recording pointcloud")
         process = subprocess.Popen("rosrun pcl_ros pointcloud_to_pcd input:=/rtabmap/cloud_map _prefix:=tmp/pc-", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
         while len(os.listdir("tmp")) == 0:
             pass
-        logging.debug(f"[/pointcloud] File created, waiting for stopped writing")
+        print(f"[/pointcloud] File created, waiting for stopped writing")
         time.sleep(1) # TODO find a better way to wait for the file to be written
         process.kill()
         filename = os.listdir("tmp")[0]
-        logging.debug(f"[/pointcloud] File written to: {filename}")
+        print(f"[/pointcloud] File written to: {filename}")
     newfilename = filename.split('.')[0] + ".xyzrgb"
     if DEBUG:
         pc = o3d.io.read_point_cloud(f'{filename}')
     else:
         pc = o3d.io.read_point_cloud(f'tmp/{filename}')
-    logging.debug(f"[/pointcloud] Point cloud loaded, size: {asizeof.asizeof(pc)}")
+    print(f"[/pointcloud] Point cloud loaded, size: {asizeof.asizeof(pc)}")
     clean_pc, _ = pc.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.25)
-    logging.debug(f"[/pointcloud] Point cloud cleaned, size: {asizeof.asizeof(clean_pc)}")
+    print(f"[/pointcloud] Point cloud cleaned, size: {asizeof.asizeof(clean_pc)}")
     o3d.io.write_point_cloud(f'tmp/{newfilename}', clean_pc, write_ascii=True)
-    logging.debug(f"[/pointcloud] New point cloud written to: {newfilename}")
+    print(f"[/pointcloud] New point cloud written to: {newfilename}")
 
     return responses.FileResponse(f'tmp/{newfilename}', media_type="text/plain", headers={"Content-Disposition": "attachment"})
 
