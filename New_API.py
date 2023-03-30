@@ -16,7 +16,7 @@ print(f"Debug mode: {DEBUG}")
 
 app = FastAPI()
 
-rospy.init_node('loco', anonymous=True)
+rospy.init_node('API', anonymous=True)
 
 key_pressed = ""
 distance = 500000
@@ -44,13 +44,10 @@ def depth_cb(data):
 @app.get("/scan")
 async def scan():
     print(f"[/scan] Endpoint Called")
-    
-    pub = rospy.Publisher('scan', String, queue_size=10)
-    pub.publish("True")
+    pub = rospy.Publisher('scan', Empty, queue_size=1)
+    pub.publish(Empty())
+    return
 
-    print("published")
-
-    return {"scan"}
 
 @app.get("/goto/{x}/{y}")
 async def goto(x,y):
@@ -77,6 +74,16 @@ async def telemetry():
         odo_msg = rospy.wait_for_message('/odometry/filtered', Odometry)
         return {"x": odo_msg.pose.pose.position.x, "y": odo_msg.pose.pose.position.y, "z": odo_msg.pose.pose.position.z, "roll": odo_msg.pose.pose.orientation.x, "pitch": odo_msg.pose.pose.orientation.y, "yaw": odo_msg.pose.pose.orientation.z}
 
+@app.get("/status")
+async def status():
+    try:
+        status_msg = rospy.wait_for_message('/robot/status', String, timeout=1)
+    except:
+        status_msg = String()
+        status_msg.data = "Unknown"
+    return {"status": status_msg.data}
+
+
 @app.get("/control/{command}")
 async def control(command):
     global key_pressed, distance
@@ -92,9 +99,12 @@ async def control(command):
     elif command == "right":
         twist.angular.z = -0.3
     elif command == "stop":
-        pub = rospy.Publisher('emergency', Empty, queue_size=1)
-        pub.publish(Empty())
-        return
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+
+        emergency_pub = rospy.Publisher('emergency', Empty, queue_size=1)
+        emergency_pub.publish(Empty())
+
     #logging.debug(f"[/control] Command: {command}, Twist: {twist}")
     pub.publish(twist)
 
@@ -134,9 +144,3 @@ async def pointcloud(response: Response):
     print(f"[/pointcloud] New point cloud written to: {newfilename}")
 
     return responses.FileResponse(f'tmp/{newfilename}', media_type="text/plain", headers={"Content-Disposition": "attachment"})
-
-# TODO: Emergency collision detection
-# cmd_pub = rospy.Publisher('cmd', String, queue_size=10)
-
-# rate = rospy.Rate(10) # 10hz
-#
