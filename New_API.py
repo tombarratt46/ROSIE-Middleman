@@ -11,7 +11,7 @@ import os
 import subprocess
 import time
 
-DEBUG = False
+DEBUG = True
 print(f"Debug mode: {DEBUG}")
 
 app = FastAPI()
@@ -95,9 +95,9 @@ async def control(command):
     elif command == "back":
         twist.linear.x = -0.2
     elif command == "left":
-        twist.angular.z = 0.3
+        twist.angular.z = 0.35
     elif command == "right":
-        twist.angular.z = -0.3
+        twist.angular.z = -0.35
     elif command == "stop":
         twist.linear.x = 0.0
         twist.angular.z = 0.0
